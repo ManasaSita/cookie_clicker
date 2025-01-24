@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import cookieImage from  '../assests/images/cookie.png';
 
-const API_URL = 'http://localhost:5000';
+const API_URL = process.env.REACT_APP_API_URL || '/api';
 
 const CookieIcon = ({ isPressed, onClick }) => (
   <img
