@@ -12,16 +12,19 @@ dotenv.config();
 
 const app = express();
 
-const allowedOrigins = [
-  'http://localhost:3000', // For local development
-  'https://cookie-clicker-plum.vercel.app/' // our deployed domain
-];
+// Allow CORS from specific frontend origin
+const corsOptions = {
+  origin: 'https://cookie-clicker-plum.vercel.app', // Replace with your actual frontend URL
+  methods: ['GET', 'POST'], // Specify allowed HTTP methods
+  allowedHeaders: ['Content-Type', 'Authorization'] // Specify allowed headers
+};
 
-// Middleware
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true 
-}));
+app.use((req, res, next) => {
+  console.log('Request Headers:', req.headers); // Log the request headers for debugging
+  next();
+});
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // MongoDB Connection
