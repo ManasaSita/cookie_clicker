@@ -15,13 +15,13 @@ const app = express();
 const cors = require('cors');
 const allowedOrigins = [
   'http://localhost:3000', // For local development
-  // 'https://your-project.vercel.app' // Add your deployed domain here
+  'https://cookie-clicker-plum.vercel.app/' // our deployed domain
 ];
 
 // Middleware
 app.use(cors({
   origin: allowedOrigins,
-  credentials: true // If you're using cookies
+  credentials: true 
 }));
 app.use(express.json());
 
