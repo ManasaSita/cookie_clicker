@@ -1,6 +1,6 @@
 import express from 'express';
 import mongoose from 'mongoose';
-import cors from 'cors';
+import cors from 'cors'; // Keep this import
 import dotenv from 'dotenv';
 
 // Jobs
@@ -12,7 +12,6 @@ dotenv.config();
 
 const app = express();
 
-const cors = require('cors');
 const allowedOrigins = [
   'http://localhost:3000', // For local development
   'https://cookie-clicker-plum.vercel.app/' // our deployed domain
