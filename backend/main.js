@@ -12,8 +12,17 @@ dotenv.config();
 
 const app = express();
 
+const cors = require('cors');
+const allowedOrigins = [
+  'http://localhost:3000', // For local development
+  // 'https://your-project.vercel.app' // Add your deployed domain here
+];
+
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true // If you're using cookies
+}));
 app.use(express.json());
 
 // MongoDB Connection
