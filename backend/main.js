@@ -4,7 +4,7 @@ import cors from 'cors'; // Keep this import
 import dotenv from 'dotenv';
 
 // Jobs
-import handleClick from './jobs/clickHandler.js';
+import handleClick from './controllers/clickHandler.js';
 import User from './models/UserSchema.js';
 
 // Load environment variables
@@ -34,6 +34,8 @@ mongoose.connect(process.env.MONGODB_URI)
 
 // Click endpoint
 app.post('/api/click', async (req, res) => {
+  console.log(req.body);
+  
   const { userId } = req.body;
   
   try {
