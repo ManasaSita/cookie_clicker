@@ -1,17 +1,17 @@
-// src/components/ClickerGame.js
-import React, { useState, useEffect } from 'react';
-import cookieImage from '../assests/images/cookie.png';
+import React, { useState, useEffect, useRef } from 'react';
+import cookieImage from  '../assests/images/cookie.png';
 
-const API_URL = 'http://localhost:5000';
+const API_URL = process.env.REACT_APP_API_URL;
 
 const CookieIcon = ({ isPressed, onClick }) => (
   <img
-    src={cookieImage}
+    src={cookieImage}// Adjust this path to where your image is stored
     alt="Cookie"
     onClick={onClick}
     style={{
-      width: '400px',
-      height: '400px',
+      // background: url(cookie.png),
+      width: '200px',
+      height: '200px',
       cursor: 'pointer',
       transform: isPressed ? 'scale(0.9)' : 'scale(1)',
       transition: 'transform 0.1s',
@@ -20,83 +20,82 @@ const CookieIcon = ({ isPressed, onClick }) => (
   />
 );
 
-const formatEffectName = (effectType) => {
-  // Convert camelCase to Title Case with spaces
-  return effectType
-    .replace(/([A-Z])/g, ' $1')
-    .replace(/^./, str => str.toUpperCase());
-};
-
-const EffectDisplay = ({ effect, timer }) => (
-  <div style={{
-    backgroundColor: '#f8f9fa',
-    padding: '8px 16px',
-    borderRadius: '6px',
-    margin: '4px 0',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-    fontFamily: 'Arial, sans-serif'
-  }}>
-    <span style={{
-      color: '#2c5282',
-      fontWeight: 'bold',
-      fontSize: '18px',
-      letterSpacing: '0.5px'
-    }}>
-      {formatEffectName(effect.type)} Active!
-    </span>
-  </div>
-);
-
-
 const ClickerGame = () => {
   const [totalScore, setTotalScore] = useState(0);
-  const [clickNotifications, setClickNotifications] = useState([]);
+  const [clickNotification, setClickNotification] = useState(null);
   const [prizes, setPrizes] = useState([]);
   const [userId, setUserId] = useState(null);
   const [isPressed, setIsPressed] = useState(false);
   const [activeEffects, setActiveEffects] = useState([]);
-  const [effectTimers, setEffectTimers] = useState({});
+  const effectTimerRef = useRef(null);
 
   useEffect(() => {
     const storedUserId = localStorage.getItem('userId');
-    const newUserId = storedUserId || `user_${Date.now()}`;
-    setUserId(newUserId);
-    localStorage.setItem('userId', newUserId);
+    setUserId(storedUserId || `user_${Date.now()}`);
+    localStorage.setItem('userId', storedUserId || `user_${Date.now()}`);
   }, []);
 
-  // Handle duration-based effects
+  // Effect tracking and cleanup
   useEffect(() => {
-    const timers = {};
-    
-    activeEffects.forEach(effect => {
-      if (effect.duration) {
-        const startTime = effect.startTime;
-        const duration = effect.duration;
-        const endTime = startTime + duration;
-
-        const timer = setInterval(() => {
-          const now = Date.now();
-          const remaining = Math.ceil((endTime - now) / 1000);
-
-          if (remaining <= 0) {
-            setActiveEffects(prev => prev.filter(e => e.type !== effect.type));
-            clearInterval(timer);
-          } else {
-            setEffectTimers(prev => ({
-              ...prev,
-              [effect.type]: remaining
-            }));
-          }
-        }, 1000);
-
-        timers[effect.type] = timer;
+    if (activeEffects.length > 0) {
+      if (effectTimerRef.current) {
+        clearInterval(effectTimerRef.current);
       }
-    });
 
-    return () => {
-      Object.values(timers).forEach(timer => clearInterval(timer));
-    };
+      effectTimerRef.current = setInterval(() => {
+        setActiveEffects(currentEffects => 
+          currentEffects.filter(effect => {
+            // Time-based effects
+            if (effect.remainingTime !== undefined) {
+              const newRemainingTime = Math.max(0, effect.remainingTime - 1);
+              return newRemainingTime > 0;
+            }
+            // Click-based effects
+            return effect.remainingClicks > 0;
+          }).map(effect => {
+            if (effect.remainingTime !== undefined) {
+              return { ...effect, remainingTime: effect.remainingTime - 1 };
+            }
+            return effect;
+          })
+        );
+      }, 1000);
+
+      return () => {
+        if (effectTimerRef.current) {
+          clearInterval(effectTimerRef.current);
+        }
+      };
+    }
   }, [activeEffects]);
+
+  // Calculate current click value based on active effects
+  const calculateClickValue = (baseValue) => {
+    return activeEffects.reduce((finalValue, effect) => {
+      switch(effect.type) {
+        case 'Double Points':
+          if (Date.now() - effect.startTime < effect.duration) {
+            return finalValue * 2;
+          }
+          return finalValue;
+        
+        case 'Prize Multiplier':
+          if (effect.remainingClicks > 0) {
+            return finalValue * 1.5;
+          }
+          return finalValue;
+        
+        case 'Lucky Charm':
+          if (effect.remainingClicks > 0) {
+            return finalValue + 10;
+          }
+          return finalValue;
+        
+        default:
+          return finalValue;
+      }
+    }, baseValue);
+  };
 
   const handleClick = async () => {
     setIsPressed(true);
@@ -106,75 +105,58 @@ const ClickerGame = () => {
       const response = await fetch(`${API_URL}/api/click`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
+        body: JSON.stringify({ 
+          userId,
+          activeEffects: activeEffects
+        })
       });
       
-      const { totalScore, scoreIncrease, prize, activeEffects: newEffects } = await response.json();
+      const { 
+        totalScore, 
+        scoreIncrease, 
+        prize, 
+        prizeEffect,
+        updatedActiveEffects 
+      } = await response.json();
       
       setTotalScore(totalScore);
       
       const notifications = [];
       
-      // Base score notification
+      // Calculate modified click value
+      const modifiedScoreIncrease = calculateClickValue(scoreIncrease);
+      
+      // Base click notification
       notifications.push({
-        value: scoreIncrease,
-        type: 'base',
+        value: modifiedScoreIncrease,
         id: Date.now(),
-        x: Math.random() * 40 - 20,
+        x: -20,
         y: Math.random() * 20 - 10
       });
-
-      // Effect bonus notifications
-      newEffects?.forEach(effect => {
-        if (effect.type === 'doublePoints') {
-          notifications.push({
-            value: scoreIncrease,
-            type: 'effect',
-            effectName: 'Double',
-            id: Date.now() + 1,
-            x: Math.random() * 40 - 20,
-            y: Math.random() * 20 - 10
-          });
-        } else if (effect.type === 'luckyCharm') {
-          notifications.push({
-            value: 10,
-            type: 'effect',
-            effectName: 'Lucky',
-            id: Date.now() + 2,
-            x: Math.random() * 40 - 20,
-            y: Math.random() * 20 - 10
-          });
-        } else if (effect.type === 'prizeMultiplier') {
-          notifications.push({
-            value: scoreIncrease * (effect.multiplier - 1),
-            type: 'effect',
-            effectName: 'Multiplier',
-            id: Date.now() + 3,
-            x: Math.random() * 40 - 20,
-            y: Math.random() * 20 - 10
-          });
-        }
-      });
       
-      // Prize notification
-      if (prize) {
+      // Prize notification if exists
+      if (prize && prizeEffect) {
         notifications.push({
-          value: scoreIncrease,
+          value: prizeEffect.pointIncrease,
           prize: prize,
-          id: Date.now() + 4,
-          x: Math.random() * 40 - 20,
+          id: Date.now() + 1,
+          x: 20,
           y: Math.random() * 20 - 10
         });
         
+        // Add new prize to list
         setPrizes(prev => [{
           name: prize,
           timestamp: new Date().toLocaleString()
         }, ...prev]);
       }
-
-      setActiveEffects(newEffects || []);
-      setClickNotifications(notifications);
-      setTimeout(() => setClickNotifications([]), 1000);
+      
+      // Update active effects
+      setActiveEffects(updatedActiveEffects || []);
+      
+      setClickNotification(notifications);
+      
+      setTimeout(() => setClickNotification(null), 1000);
     } catch (error) {
       console.error('Click failed', error);
     }
@@ -204,66 +186,53 @@ const ClickerGame = () => {
       }}>
         <h2>{totalScore} cookies</h2>
         
-        {activeEffects.length > 0 && (
-          <div style={{
-            color: 'green',
-            marginBottom: '10px',
-            fontWeight: 'bold'
-          }}>
-            {activeEffects.map(effect => (
-              <EffectDisplay 
-                key={effect.type} 
-                effect={effect}
-                timer={effectTimers[effect.type]}
-              />
-            ))}
+        {/* Active Effects Display */}
+        {activeEffects.map((effect, index) => (
+          <div 
+            key={index} 
+            style={{ 
+              color: 'green', 
+              marginBottom: '10px', 
+              fontWeight: 'bold' 
+            }}
+          >
+            {effect.type} 
+            {effect.remainingTime !== undefined 
+              ? ` ends in: ${effect.remainingTime} seconds`
+              : ` remaining: ${effect.remainingClicks} clicks`
+            }
           </div>
-        )}
+        ))}
         
         <div style={{ position: 'relative' }}>
           <CookieIcon 
             isPressed={isPressed}
             onClick={handleClick} 
           />
-          
-          {clickNotifications.map((notification) => (
-            <div key={notification.id} style={{
-              position: 'absolute',
-              top: notification.prize || notification.type === 'effect' ? '50%' : '60%',
-              left: notification.prize || notification.type === 'effect' ? '50%' : '40%',
-              transform: `translate(${notification.x}px, ${notification.y}px)`,
-              color: notification.prize ? 'brown' : 
-                     notification.type === 'effect' ? '#4CAF50' : 'white',
-              opacity: 0,
-              animation: 'fadeOut 5s forwards',
-              fontSize: '24px',
-              textAlign: 'center',
-              fontWeight: notification.prize || notification.type === 'effect' ? 'bold' : 'normal'
-            }}>
-              {notification.prize 
-                ? `🎉+${notification.value}`
-                : notification.type === 'effect'
-                  ? `+${notification.value}`
-                  : `+${notification.value}`
-              }
-            </div>
-          ))}
+
+          {clickNotification && clickNotification
+            .filter(notification => notification.value > 0)
+            .map(notification => (
+              <div key={notification.id} style={{
+                position: 'absolute',
+                top: notification.prize ? '20%' : '60%', 
+                left: notification.prize ? '50%' : '50%',
+                transform: `translate(${notification.x}px, ${notification.y}px)`,
+                color: notification.prize ? 'brown' : 'white',
+                opacity: 0,
+                animation: 'fadeOut 3s forwards',
+                fontSize: '24px',
+                textAlign: 'center',
+                fontWeight: notification.prize ? 'bold' : 'normal'
+              }}>
+                {notification.prize ? `🎉+${notification.value}` : `+${notification.value}`}
+              </div>
+            ))
+          }
         </div>
-        
-        {activeEffects.map(effect => (
-          <div key={effect.type} style={{
-            marginTop: '10px',
-            fontSize: '18px',
-            color: 'blue'
-          }}>
-            {effect.duration 
-              ? `${formatEffectName(effect.type)} ends in: ${effectTimers[effect.type] || 0} seconds`
-              : `${formatEffectName(effect.type)} remaining: ${effect.remainingClicks} clicks`
-            }
-          </div>
-        ))}
       </div>
 
+      {/* Prize List */}
       <div style={{ 
         width: '50%', 
         backgroundColor: '#e0e0e0', 
@@ -302,9 +271,7 @@ const ClickerGame = () => {
               borderRadius: '5px'
             }}
           >
-            <div>
-              <span style={{ fontWeight: 'bold' }}>{prize.name}</span>
-            </div>
+            {prize.name}
             <button 
               onClick={() => removePrize(index)}
               style={{
@@ -327,8 +294,8 @@ const ClickerGame = () => {
 
       <style>{`
         @keyframes fadeOut {
-          0% { opacity: 1; transform: translate(-50%, -50%); }
-          100% { opacity: 0; transform: translate(-50%, -100%); }
+          0% { opacity: 1; transform: translate(0, 0); }
+          100% { opacity: 0; transform: translate(var(--x), var(--y)); }
         }
       `}</style>
     </div>
